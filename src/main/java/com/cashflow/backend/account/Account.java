@@ -34,4 +34,9 @@ public class Account {
         this.balance = balance;
         this.user = user;
     }
+
+    // 계좌 이름 변경
+    public void updateAccountName(String accountName) {
+        this.accountName = accountName;
+    }
 }
