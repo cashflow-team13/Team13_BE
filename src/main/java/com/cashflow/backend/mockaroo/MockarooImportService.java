@@ -21,6 +21,8 @@ public class MockarooImportService {
     private final MockarooClient mockarooClient;
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final SubscriptionTransactionGenerator
+        subscriptionTransactionGenerator;
 
     @Transactional
     public int importTransactions(Long accountId, int count) {
@@ -71,6 +73,24 @@ public class MockarooImportService {
         transactionRepository.saveAll(transactions);
 
         return transactions.size();
+
+        
+    }
+
+    @Transactional
+    public int generateSubscriptions(Long accountId, int months) {
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "계좌를 찾을 수 없습니다."
+                        )
+                );
+
+        return subscriptionTransactionGenerator.generate(
+                account,
+                months
+        );
     }
 
     // 거래처 기반 카테고리 자동 분류

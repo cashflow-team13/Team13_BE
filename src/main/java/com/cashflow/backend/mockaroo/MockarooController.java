@@ -44,4 +44,26 @@ public class MockarooController {
                 )
         );
     }
+
+    @PostMapping("/subscriptions/generate")
+    public ResponseEntity<Map<String, Object>> generateSubscriptions(
+            @RequestParam Long accountId,
+            @RequestParam(defaultValue = "3") int months
+    ) {
+
+        int savedCount =
+                mockarooImportService.generateSubscriptions(
+                        accountId,
+                        months
+                );
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "정기 구독 거래내역 생성 완료",
+                        "accountId", accountId,
+                        "months", months,
+                        "savedCount", savedCount
+                )
+        );
+    }
 }
