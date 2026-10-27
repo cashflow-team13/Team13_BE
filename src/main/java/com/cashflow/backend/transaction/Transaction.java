@@ -20,45 +20,51 @@ public class Transaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 거래가 발생한 계좌
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
-    // 거래 금액
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    // 거래 유형 (INCOME / EXPENSE)
     @Column(nullable = false)
     private String type;
 
-    // 소비 카테고리 (식비, 교통비 등)
     private String category;
 
-    // 거래 날짜
+    // 거래처명 추가
+    private String merchantName;
+
     @Column(nullable = false)
     private LocalDate transactionDate;
 
-    public Transaction(Account account, BigDecimal amount,
-                       String type, String category,
-                       LocalDate transactionDate) {
+    public Transaction(
+            Account account,
+            BigDecimal amount,
+            String type,
+            String category,
+            String merchantName,
+            LocalDate transactionDate
+    ) {
         this.account = account;
         this.amount = amount;
         this.type = type;
         this.category = category;
+        this.merchantName = merchantName;
         this.transactionDate = transactionDate;
     }
 
     public void updateTransaction(
-        BigDecimal amount,
-        String type,
-        String category,
-        LocalDate transactionDate
+            BigDecimal amount,
+            String type,
+            String category,
+            String merchantName,
+            LocalDate transactionDate
     ) {
         this.amount = amount;
         this.type = type;
         this.category = category;
+        this.merchantName = merchantName;
         this.transactionDate = transactionDate;
     }
 }

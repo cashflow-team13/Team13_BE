@@ -41,6 +41,7 @@ public class TransactionService {
                 request.amount(),
                 request.type(),
                 request.category(),
+                request.merchantName(),
                 request.transactionDate()
         );
 
@@ -96,6 +97,7 @@ public class TransactionService {
                 request.amount(),
                 request.type(),
                 request.category(),
+                request.merchantName(),
                 request.transactionDate()
         );
 

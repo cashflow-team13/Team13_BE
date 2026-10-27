@@ -2,7 +2,6 @@
 package com.cashflow.backend.transaction.dto;
 
 import com.cashflow.backend.transaction.Transaction;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -12,9 +11,9 @@ public record TransactionResponse(
         BigDecimal amount,
         String type,
         String category,
+        String merchantName,
         LocalDate transactionDate
 ) {
-
     public static TransactionResponse from(Transaction transaction) {
         return new TransactionResponse(
                 transaction.getId(),
@@ -22,6 +21,7 @@ public record TransactionResponse(
                 transaction.getAmount(),
                 transaction.getType(),
                 transaction.getCategory(),
+                transaction.getMerchantName(),
                 transaction.getTransactionDate()
         );
     }
