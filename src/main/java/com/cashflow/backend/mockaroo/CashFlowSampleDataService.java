@@ -90,9 +90,81 @@ public class CashFlowSampleDataService {
             }
         }
 
+        
+        // 3. 구독 결제 데이터 추가
+        result.addAll(generateSubscriptionData(startDate, today));
+
+        // 4. 날짜순 정렬
         return result.stream()
                 .sorted((a, b) ->
                         a.transactionDate().compareTo(b.transactionDate()))
                 .toList();
+
     }
+
+    
+    private List<MockTransactionResponse> generateSubscriptionData(
+            LocalDate startDate,
+            LocalDate today
+    ) {
+        List<MockTransactionResponse> subscriptions = new ArrayList<>();
+
+        // 서비스 이름과 월 결제금액
+        String[] services = {
+                "넷플릭스",
+                "유튜브 프리미엄",
+                "티빙",
+                "디즈니+",
+                "뮤직박스"
+        };
+
+        long[] prices = {
+                13500,
+                14900,
+                13500,
+                9900,
+                7900
+        };
+
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        for (int serviceIndex = 0; serviceIndex < services.length; serviceIndex++) {
+
+            // 서비스별 결제 기준일을 다르게 설정
+            int baseDay = 5 + serviceIndex * 4;
+
+            LocalDate month = startDate.withDayOfMonth(1);
+
+            while (!month.isAfter(today)) {
+
+                // 기준일에서 ±2일 변동
+                int dayOffset = random.nextInt(-2, 3);
+
+                LocalDate paymentDate = month
+                        .withDayOfMonth(baseDay)
+                        .plusDays(dayOffset);
+
+                // 결제금액 ±500원 변동
+                long amount = prices[serviceIndex]
+                        + random.nextInt(-500, 501);
+
+                if (!paymentDate.isBefore(startDate)
+                        && !paymentDate.isAfter(today)) {
+
+                    subscriptions.add(new MockTransactionResponse(
+                            BigDecimal.valueOf(amount),
+                            "EXPENSE",
+                            "구독",
+                            services[serviceIndex],
+                            paymentDate
+                    ));
+                }
+
+                month = month.plusMonths(1);
+            }
+        }
+
+        return subscriptions;
+    }
+
 }
