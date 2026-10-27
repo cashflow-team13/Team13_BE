@@ -49,4 +49,16 @@ public class Transaction {
         this.category = category;
         this.transactionDate = transactionDate;
     }
+
+    public void updateTransaction(
+        BigDecimal amount,
+        String type,
+        String category,
+        LocalDate transactionDate
+    ) {
+        this.amount = amount;
+        this.type = type;
+        this.category = category;
+        this.transactionDate = transactionDate;
+    }
 }

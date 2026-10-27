@@ -39,4 +39,17 @@ public class Account {
     public void updateAccountName(String accountName) {
         this.accountName = accountName;
     }
+
+    // 잔액 증가
+    public void increaseBalance(BigDecimal amount) {
+        this.balance = this.balance.add(amount);
+    }
+
+    // 잔액 감소
+    public void decreaseBalance(BigDecimal amount) {
+        if (this.balance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException("계좌 잔액이 부족합니다.");
+        }
+        this.balance = this.balance.subtract(amount);
+    }
 }
