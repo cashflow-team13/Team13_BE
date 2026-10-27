@@ -17,6 +17,7 @@ public class MockarooController {
 
     private final MockarooClient mockarooClient;
     private final MockarooImportService mockarooImportService;
+    private final CashFlowSampleDataService cashFlowSampleDataService;
 
     // Mockaroo 데이터 조회 (DB 저장 X)
     @GetMapping("/transactions")
@@ -66,4 +67,14 @@ public class MockarooController {
                 )
         );
     }
+
+    
+    @GetMapping("/sample")
+    public List<MockTransactionResponse> getSampleData(
+            @RequestParam(defaultValue = "3") int months,
+            @RequestParam(defaultValue = "200") int count
+    ) {
+        return cashFlowSampleDataService.generateSampleData(months, count);
+    }
+
 }
