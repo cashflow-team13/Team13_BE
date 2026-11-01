@@ -25,9 +25,20 @@ public class SubscriptionDetectionService {
 
     private final TransactionRepository transactionRepository;
 
+    // 월간 결제 허용 간격
+    private static final int MIN_INTERVAL = 26;
+    private static final int MAX_INTERVAL = 35;
+
+    // 최소 반복 결제 횟수
+    private static final int MIN_PAYMENT_COUNT = 3;
+
+    // 결제 금액 허용 오차: 10%
+    private static final BigDecimal AMOUNT_TOLERANCE =
+            new BigDecimal("0.10");
+
     public List<SubscriptionDetectionResponse> detect(Long accountId) {
 
-        // 1. 해당 계좌의 지출 거래만 조회
+        // 1. 계좌의 유효한 지출 거래 조회
         List<Transaction> expenses = transactionRepository
                 .findByAccountId(accountId)
                 .stream()
@@ -47,104 +58,139 @@ public class SubscriptionDetectionService {
 
         List<SubscriptionDetectionResponse> results = new ArrayList<>();
 
-        // 3. 거래처별 반복결제 분석
+        // 3. 거래처별 반복 패턴 탐색
         for (Map.Entry<String, List<Transaction>> entry : grouped.entrySet()) {
 
             String merchantName = entry.getKey();
 
             List<Transaction> transactions = entry.getValue()
                     .stream()
-                    .sorted(Comparator.comparing(Transaction::getTransactionDate))
+                    .sorted(Comparator.comparing(
+                            Transaction::getTransactionDate
+                    ))
                     .toList();
 
-            // 최소 3회 이상 결제
-            if (transactions.size() < 3) {
+            List<Transaction> bestPattern = findBestPattern(transactions);
+
+            if (bestPattern.size() < MIN_PAYMENT_COUNT) {
                 continue;
             }
 
-            // 4. 결제 간격 계산
-            List<Long> intervals = new ArrayList<>();
-
-            for (int i = 1; i < transactions.size(); i++) {
-                long days = ChronoUnit.DAYS.between(
-                        transactions.get(i - 1).getTransactionDate(),
-                        transactions.get(i).getTransactionDate()
-                );
-                intervals.add(days);
-            }
-
-            double averageInterval = intervals.stream()
-                    .mapToLong(Long::longValue)
-                    .average()
-                    .orElse(0);
-
-            // 월간 결제: 평균 26~35일
-            if (averageInterval < 26 || averageInterval > 35) {
-                continue;
-            }
-
-            // 개별 결제 간격도 월간 범위에 들어야 함
-            boolean regularInterval = intervals.stream()
-                    .allMatch(days -> days >= 26 && days <= 35);
-
-            if (!regularInterval) {
-                continue;
-            }
-
-            // 5. 결제금액 유사도 분석
-            BigDecimal total = transactions.stream()
+            // 4. 탐지된 패턴만 사용해 평균 결제금액 계산
+            BigDecimal total = bestPattern.stream()
                     .map(Transaction::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal averageAmount = total.divide(
-                    BigDecimal.valueOf(transactions.size()),
+                    BigDecimal.valueOf(bestPattern.size()),
                     0,
                     RoundingMode.HALF_UP
             );
 
-            // 평균 금액 대비 ±10% 허용
-            boolean similarAmounts = transactions.stream()
-                    .allMatch(t -> {
-                        BigDecimal difference = t.getAmount()
-                                .subtract(averageAmount)
-                                .abs();
+            // 5. 탐지된 패턴의 평균 결제 간격
+            long totalInterval = 0;
 
-                        return difference.compareTo(
-                                averageAmount.multiply(
-                                        new BigDecimal("0.10")
-                                )
-                        ) <= 0;
-                    });
-
-            if (!similarAmounts) {
-                continue;
+            for (int i = 1; i < bestPattern.size(); i++) {
+                totalInterval += ChronoUnit.DAYS.between(
+                        bestPattern.get(i - 1).getTransactionDate(),
+                        bestPattern.get(i).getTransactionDate()
+                );
             }
 
-            // 6. 다음 결제일 예측
-            LocalDate lastPaymentDate = transactions
-                    .get(transactions.size() - 1)
+            long averageInterval = Math.round(
+                    (double) totalInterval / (bestPattern.size() - 1)
+            );
+
+            LocalDate lastPaymentDate = bestPattern
+                    .get(bestPattern.size() - 1)
                     .getTransactionDate();
 
-            long roundedInterval = Math.round(averageInterval);
-
             LocalDate nextExpectedPaymentDate =
-                    lastPaymentDate.plusDays(roundedInterval);
+                    lastPaymentDate.plusDays(averageInterval);
 
-            // 7. 탐지 결과 저장
             results.add(new SubscriptionDetectionResponse(
                     merchantName,
                     averageAmount,
-                    transactions.size(),
-                    roundedInterval,
+                    bestPattern.size(),
+                    averageInterval,
                     lastPaymentDate,
                     nextExpectedPaymentDate
             ));
         }
 
         results.sort(
-                Comparator.comparing(SubscriptionDetectionResponse::merchantName)
+                Comparator.comparing(
+                        SubscriptionDetectionResponse::merchantName
+                )
         );
 
         return results;
+    }
+
+    // 같은 거래처에서 월간 반복 결제 패턴 찾기
+    private List<Transaction> findBestPattern(List<Transaction> transactions) {
+
+        List<Transaction> bestPattern = new ArrayList<>();
+
+        // 모든 거래를 시작점으로 시도
+        for (int i = 0; i < transactions.size(); i++) {
+
+            List<Transaction> pattern = new ArrayList<>();
+            pattern.add(transactions.get(i));
+
+            Transaction last = transactions.get(i);
+
+            for (int j = i + 1; j < transactions.size(); j++) {
+
+                Transaction current = transactions.get(j);
+
+                long interval = ChronoUnit.DAYS.between(
+                        last.getTransactionDate(),
+                        current.getTransactionDate()
+                );
+
+                // 너무 이른 거래는 건너뛰기
+                if (interval < MIN_INTERVAL) {
+                    continue;
+                }
+
+                // 허용 간격을 초과하면 현재 패턴 종료
+                if (interval > MAX_INTERVAL) {
+                    break;
+                }
+
+                // 금액이 비슷한지 확인
+                if (!isSimilarAmount(
+                        pattern.get(0).getAmount(),
+                        current.getAmount()
+                )) {
+                    continue;
+                }
+
+                pattern.add(current);
+                last = current;
+            }
+
+            if (pattern.size() > bestPattern.size()) {
+                bestPattern = pattern;
+            }
+        }
+
+        return bestPattern;
+    }
+
+    // 두 결제금액의 차이가 기준 금액의 10% 이내인지 검사
+    private boolean isSimilarAmount(
+            BigDecimal referenceAmount,
+            BigDecimal currentAmount
+    ) {
+        BigDecimal difference = referenceAmount
+                .subtract(currentAmount)
+                .abs();
+
+        BigDecimal tolerance = referenceAmount
+                .multiply(AMOUNT_TOLERANCE);
+
+        return difference.compareTo(tolerance) <= 0;
     }
 }
