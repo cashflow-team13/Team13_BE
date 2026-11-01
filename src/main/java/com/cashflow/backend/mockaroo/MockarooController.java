@@ -18,6 +18,7 @@ public class MockarooController {
     private final MockarooClient mockarooClient;
     private final MockarooImportService mockarooImportService;
     private final CashFlowSampleDataService cashFlowSampleDataService;
+    private final CashFlowSampleImportService cashFlowSampleImportService;
 
     // Mockaroo 데이터 조회 (DB 저장 X)
     @GetMapping("/transactions")
@@ -75,6 +76,22 @@ public class MockarooController {
             @RequestParam(defaultValue = "200") int count
     ) {
         return cashFlowSampleDataService.generateSampleData(months, count);
+    }
+
+    @PostMapping("/sample/import")
+    public ResponseEntity<Map<String, Object>> importSampleData(
+            @RequestParam Long accountId,
+            @RequestParam(defaultValue = "3") int months,
+            @RequestParam(defaultValue = "200") int count
+    ) {
+        int savedCount = cashFlowSampleImportService
+                .importSampleData(accountId, months, count);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "통합 샘플데이터 저장 완료",
+                "accountId", accountId,
+                "savedCount", savedCount
+        ));
     }
 
 }
