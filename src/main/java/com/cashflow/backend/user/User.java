@@ -1,4 +1,3 @@
-
 package com.cashflow.backend.user;
 
 import jakarta.persistence.*;
@@ -23,6 +22,12 @@ public class User {
     private String email;
 
     public User(String name, String email) {
+        this.name = name;
+        this.email = email;
+    }
+
+    // 사용자 정보 수정
+    public void update(String name, String email) {
         this.name = name;
         this.email = email;
     }
