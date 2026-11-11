@@ -1,6 +1,8 @@
 
 package com.cashflow.backend.subscription;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,10 +12,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.cashflow.backend.subscription.dto.SubscriptionCreateRequest;
-import com.cashflow.backend.subscription.dto.SubscriptionResponse;
 import com.cashflow.backend.subscription.dto.SubscriptionConfirmRequest;
-import java.util.List;
+import com.cashflow.backend.subscription.dto.SubscriptionCreateRequest;
+import com.cashflow.backend.subscription.dto.SubscriptionRejectRequest;
+import com.cashflow.backend.subscription.dto.SubscriptionResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,5 +48,14 @@ public class SubscriptionController {
     ) {
         subscriptionService.confirmSubscription(request);
     }
+
+    @PostMapping("/reject")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void rejectSubscription(
+            @RequestBody SubscriptionRejectRequest request
+    ) {
+        subscriptionService.rejectSubscription(request);
+    }
+
 
 }

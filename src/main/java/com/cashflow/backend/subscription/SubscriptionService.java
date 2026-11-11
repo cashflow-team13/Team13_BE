@@ -1,21 +1,23 @@
 
 package com.cashflow.backend.subscription;
 
+import java.util.List;
+
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.CONFLICT;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import com.cashflow.backend.subscription.dto.SubscriptionResponse;
-import java.util.List;
 
 import com.cashflow.backend.account.Account;
 import com.cashflow.backend.account.AccountRepository;
 import com.cashflow.backend.subscription.dto.SubscriptionConfirmRequest;
-import com.cashflow.backend.subscription.dto.SubscriptionDetectionResponse;
 import com.cashflow.backend.subscription.dto.SubscriptionCreateRequest;
+import com.cashflow.backend.subscription.dto.SubscriptionDetectionResponse;
+import com.cashflow.backend.subscription.dto.SubscriptionRejectRequest;
+import com.cashflow.backend.subscription.dto.SubscriptionResponse;
 import com.cashflow.backend.user.User;
 import com.cashflow.backend.user.UserRepository;
 
@@ -29,6 +31,7 @@ public class SubscriptionService {
     private final UserRepository userRepository;
     private final SubscriptionDetectionService subscriptionDetectionService;
     private final AccountRepository accountRepository;
+    private final RejectedSubscriptionRepository rejectedSubscriptionRepository;
 
     @Transactional
     public Subscription create(SubscriptionCreateRequest request) {
@@ -176,5 +179,75 @@ public class SubscriptionService {
 
         return subscriptionRepository.save(subscription);
     }
+
+        @Transactional
+        public void rejectSubscription(SubscriptionRejectRequest request) {
+
+        if (request == null ||
+                request.userId() == null ||
+                request.accountId() == null ||
+                request.merchantName() == null ||
+                request.merchantName().isBlank()) {
+                throw new ResponseStatusException(
+                        BAD_REQUEST, "Required fields are missing"
+                );
+        }
+
+        User user = userRepository.findById(request.userId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        NOT_FOUND, "User not found"
+                ));
+
+        Account account = accountRepository.findById(request.accountId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        NOT_FOUND, "Account not found"
+                ));
+
+        if (account.getUser() == null ||
+                !account.getUser().getId().equals(user.getId())) {
+                throw new ResponseStatusException(
+                        FORBIDDEN, "Account does not belong to user"
+                );
+        }
+
+        String merchantName = request.merchantName().trim();
+
+        // 탐지된 후보 중 해당 거래처 찾기
+        SubscriptionDetectionResponse candidate =
+                subscriptionDetectionService.detect(request.accountId())
+                        .stream()
+                        .filter(result ->
+                                result.merchantName()
+                                        .equalsIgnoreCase(merchantName))
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(
+                                NOT_FOUND, "Subscription candidate not found"
+                        ));
+
+        // 동일 계좌·거래처의 기존 거절 기록 확인
+        RejectedSubscription rejection =
+                rejectedSubscriptionRepository
+                        .findByAccountIdAndMerchantNameIgnoreCase(
+                                request.accountId(), merchantName
+                        )
+                        .orElse(null);
+
+        if (rejection == null) {
+                rejectedSubscriptionRepository.save(
+                        new RejectedSubscription(
+                                request.accountId(),
+                                candidate.merchantName(),
+                                candidate.averageAmount(),
+                                candidate.lastPaymentDate()
+                        )
+                );
+        } else {
+                rejection.update(
+                        candidate.averageAmount(),
+                        candidate.lastPaymentDate()
+                );
+        }
+        }
+
 
 }

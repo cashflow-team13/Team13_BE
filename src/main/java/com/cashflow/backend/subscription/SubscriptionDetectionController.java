@@ -21,8 +21,15 @@ public class SubscriptionDetectionController {
 
     @GetMapping("/detect")
     public List<SubscriptionDetectionResponse> detectSubscriptions(
-            @RequestParam Long accountId
+            @RequestParam Long accountId,
+            @RequestParam(required = false) Long userId
     ) {
-        return subscriptionDetectionService.detect(accountId);
+        if (userId == null) {
+            return subscriptionDetectionService.detect(accountId);
+        }
+
+        return subscriptionDetectionService.detectAvailable(
+                accountId, userId
+        );
     }
 }

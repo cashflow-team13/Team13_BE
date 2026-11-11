@@ -8,7 +8,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -24,6 +26,8 @@ import lombok.RequiredArgsConstructor;
 public class SubscriptionDetectionService {
 
     private final TransactionRepository transactionRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final RejectedSubscriptionRepository rejectedSubscriptionRepository;
 
     // 월간 결제 허용 간격
     private static final int MIN_INTERVAL = 26;
@@ -193,4 +197,68 @@ public class SubscriptionDetectionService {
 
         return difference.compareTo(tolerance) <= 0;
     }
+
+    public List<SubscriptionDetectionResponse> detectAvailable(
+            Long accountId,
+            Long userId
+    ) {
+        // 기존 탐지 알고리즘 실행
+        List<SubscriptionDetectionResponse> candidates = detect(accountId);
+
+        // 이미 확정된 구독 목록
+        Set<String> confirmedNames = subscriptionRepository
+                .findByUserId(userId)
+                .stream()
+                .map(s -> s.getServiceName().trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+
+        // 거절된 구독 기록
+        Map<String, RejectedSubscription> rejectedMap =
+                rejectedSubscriptionRepository.findByAccountId(accountId)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                r -> r.getMerchantName()
+                                        .trim().toLowerCase(Locale.ROOT),
+                                r -> r,
+                                (first, second) -> first
+                        ));
+
+        return candidates.stream()
+                // 이미 확정된 서비스 제외
+                .filter(candidate ->
+                        !confirmedNames.contains(
+                                candidate.merchantName()
+                                        .trim().toLowerCase(Locale.ROOT)
+                        )
+                )
+                // 거절된 패턴 제외
+                .filter(candidate -> {
+                    RejectedSubscription rejected = rejectedMap.get(
+                            candidate.merchantName()
+                                    .trim().toLowerCase(Locale.ROOT)
+                    );
+
+                    if (rejected == null) {
+                        return true;
+                    }
+
+                    // 거절 이후 새로운 결제가 발생했으면 재검토
+                    if (candidate.lastPaymentDate()
+                            .isAfter(rejected.getLastPaymentDate())) {
+                        return true;
+                    }
+
+                    // 결제금액이 20% 이상 달라졌으면 재검토
+                    BigDecimal difference = candidate.averageAmount()
+                            .subtract(rejected.getRejectedAmount())
+                            .abs();
+
+                    BigDecimal threshold = rejected.getRejectedAmount()
+                            .multiply(new BigDecimal("0.20"));
+
+                    return difference.compareTo(threshold) > 0;
+                })
+                .toList();
+    }
+
 }
