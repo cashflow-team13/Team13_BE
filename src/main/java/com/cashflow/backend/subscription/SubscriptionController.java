@@ -16,6 +16,7 @@ import com.cashflow.backend.subscription.dto.SubscriptionConfirmRequest;
 import com.cashflow.backend.subscription.dto.SubscriptionCreateRequest;
 import com.cashflow.backend.subscription.dto.SubscriptionRejectRequest;
 import com.cashflow.backend.subscription.dto.SubscriptionResponse;
+import com.cashflow.backend.subscription.dto.SubscriptionSummaryResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -57,5 +58,18 @@ public class SubscriptionController {
         subscriptionService.rejectSubscription(request);
     }
 
+    @GetMapping("/summary")
+    public SubscriptionSummaryResponse getSubscriptionSummary(
+            @RequestParam Long userId
+    ) {
+        return subscriptionService.getSubscriptionSummary(userId);
+    }
+
+    @GetMapping("/upcoming")
+    public List<SubscriptionResponse> getUpcomingSubscriptions(
+            @RequestParam Long userId
+    ) {
+        return subscriptionService.getUpcomingSubscriptions(userId);
+    }
 
 }

@@ -1,6 +1,9 @@
 
 package com.cashflow.backend.subscription;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
@@ -18,6 +21,7 @@ import com.cashflow.backend.subscription.dto.SubscriptionCreateRequest;
 import com.cashflow.backend.subscription.dto.SubscriptionDetectionResponse;
 import com.cashflow.backend.subscription.dto.SubscriptionRejectRequest;
 import com.cashflow.backend.subscription.dto.SubscriptionResponse;
+import com.cashflow.backend.subscription.dto.SubscriptionSummaryResponse;
 import com.cashflow.backend.user.User;
 import com.cashflow.backend.user.UserRepository;
 
@@ -180,74 +184,147 @@ public class SubscriptionService {
         return subscriptionRepository.save(subscription);
     }
 
-        @Transactional
-        public void rejectSubscription(SubscriptionRejectRequest request) {
+	@Transactional
+	public void rejectSubscription(SubscriptionRejectRequest request) {
 
-        if (request == null ||
-                request.userId() == null ||
-                request.accountId() == null ||
-                request.merchantName() == null ||
-                request.merchantName().isBlank()) {
-                throw new ResponseStatusException(
-                        BAD_REQUEST, "Required fields are missing"
-                );
-        }
+	if (request == null ||
+			request.userId() == null ||
+			request.accountId() == null ||
+			request.merchantName() == null ||
+			request.merchantName().isBlank()) {
+			throw new ResponseStatusException(
+					BAD_REQUEST, "Required fields are missing"
+			);
+	}
 
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        NOT_FOUND, "User not found"
-                ));
+	User user = userRepository.findById(request.userId())
+			.orElseThrow(() -> new ResponseStatusException(
+					NOT_FOUND, "User not found"
+			));
 
-        Account account = accountRepository.findById(request.accountId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        NOT_FOUND, "Account not found"
-                ));
+	Account account = accountRepository.findById(request.accountId())
+			.orElseThrow(() -> new ResponseStatusException(
+					NOT_FOUND, "Account not found"
+			));
 
-        if (account.getUser() == null ||
-                !account.getUser().getId().equals(user.getId())) {
-                throw new ResponseStatusException(
-                        FORBIDDEN, "Account does not belong to user"
-                );
-        }
+	if (account.getUser() == null ||
+			!account.getUser().getId().equals(user.getId())) {
+			throw new ResponseStatusException(
+					FORBIDDEN, "Account does not belong to user"
+			);
+	}
 
-        String merchantName = request.merchantName().trim();
+	String merchantName = request.merchantName().trim();
 
-        // 탐지된 후보 중 해당 거래처 찾기
-        SubscriptionDetectionResponse candidate =
-                subscriptionDetectionService.detect(request.accountId())
-                        .stream()
-                        .filter(result ->
-                                result.merchantName()
-                                        .equalsIgnoreCase(merchantName))
-                        .findFirst()
-                        .orElseThrow(() -> new ResponseStatusException(
-                                NOT_FOUND, "Subscription candidate not found"
-                        ));
+	// 탐지된 후보 중 해당 거래처 찾기
+	SubscriptionDetectionResponse candidate =
+			subscriptionDetectionService.detect(request.accountId())
+					.stream()
+					.filter(result ->
+							result.merchantName()
+									.equalsIgnoreCase(merchantName))
+					.findFirst()
+					.orElseThrow(() -> new ResponseStatusException(
+							NOT_FOUND, "Subscription candidate not found"
+					));
 
-        // 동일 계좌·거래처의 기존 거절 기록 확인
-        RejectedSubscription rejection =
-                rejectedSubscriptionRepository
-                        .findByAccountIdAndMerchantNameIgnoreCase(
-                                request.accountId(), merchantName
-                        )
-                        .orElse(null);
+	// 동일 계좌·거래처의 기존 거절 기록 확인
+	RejectedSubscription rejection =
+			rejectedSubscriptionRepository
+					.findByAccountIdAndMerchantNameIgnoreCase(
+							request.accountId(), merchantName
+					)
+					.orElse(null);
 
-        if (rejection == null) {
-                rejectedSubscriptionRepository.save(
-                        new RejectedSubscription(
-                                request.accountId(),
-                                candidate.merchantName(),
-                                candidate.averageAmount(),
-                                candidate.lastPaymentDate()
-                        )
-                );
-        } else {
-                rejection.update(
-                        candidate.averageAmount(),
-                        candidate.lastPaymentDate()
-                );
-        }
-        }
+	if (rejection == null) {
+			rejectedSubscriptionRepository.save(
+					new RejectedSubscription(
+							request.accountId(),
+							candidate.merchantName(),
+							candidate.averageAmount(),
+							candidate.lastPaymentDate()
+					)
+			);
+	} else {
+			rejection.update(
+					candidate.averageAmount(),
+					candidate.lastPaymentDate()
+			);
+	}
+	}
+
+	@Transactional(readOnly = true)
+	public SubscriptionSummaryResponse getSubscriptionSummary(Long userId) {
+
+		if (userId == null) {
+			throw new ResponseStatusException(
+					BAD_REQUEST, "userId is required"
+			);
+		}
+
+		if (!userRepository.existsById(userId)) {
+			throw new ResponseStatusException(
+					NOT_FOUND, "User not found"
+			);
+		}
+
+		List<Subscription> subscriptions =
+				subscriptionRepository.findByUserId(userId);
+
+		BigDecimal monthlyTotal = BigDecimal.ZERO;
+
+		for (Subscription subscription : subscriptions) {
+
+			BigDecimal price = subscription.getPrice();
+
+			if ("MONTHLY".equals(subscription.getBillingCycle())) {
+				monthlyTotal = monthlyTotal.add(price);
+
+			} else if ("YEARLY".equals(subscription.getBillingCycle())) {
+				BigDecimal monthlyPrice = price.divide(
+						BigDecimal.valueOf(12),
+						2,
+						RoundingMode.HALF_UP
+				);
+
+				monthlyTotal = monthlyTotal.add(monthlyPrice);
+			}
+		}
+
+		return new SubscriptionSummaryResponse(
+				userId,
+				subscriptions.size(),
+				monthlyTotal
+		);
+	}
+
+	@Transactional(readOnly = true)
+	public List<SubscriptionResponse> getUpcomingSubscriptions(Long userId) {
+
+		if (userId == null) {
+			throw new ResponseStatusException(
+					BAD_REQUEST, "userId is required"
+			);
+		}
+
+		if (!userRepository.existsById(userId)) {
+			throw new ResponseStatusException(
+					NOT_FOUND, "User not found"
+			);
+		}
+
+		return subscriptionRepository.findByUserId(userId)
+				.stream()
+				.filter(subscription ->
+						subscription.getNextPaymentDate() != null
+				)
+				.sorted(Comparator.comparing(
+						Subscription::getNextPaymentDate
+				))
+				.map(SubscriptionResponse::from)
+				.toList();
+	}
+
 
 
 }
